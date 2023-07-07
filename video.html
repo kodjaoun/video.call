@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Appel vidéo</title>
+  <style>
+    #localVideo, #remoteVideo {
+      width: 400px;
+      height: 300px;
+    }
+  </style>
+</head>
+<body>
+  <video id="localVideo" autoplay></video>
+  <video id="remoteVideo" autoplay></video>
+  <br>
+  <button id="startButton">Démarrer l'appel</button>
+  <button id="stopButton">Arrêter l'appel</button>
+
+  <script>
+    // Obtenir les références des éléments HTML
+    const localVideo = document.getElementById('localVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+
+    let localStream;
+    let remoteStream;
+    let localPeerConnection;
+    let remotePeerConnection;
+
+    // Fonction pour démarrer l'appel vidéo
+    async function startCall() {
+      try {
+        // Obtenir l'accès à la caméra et au microphone
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+
+        // Afficher le flux local dans l'élément vidéo local
+        localVideo.srcObject = localStream;
+
+        // Créer la connexion peer pour le flux local
+        localPeerConnection = new RTCPeerConnection();
+
+        // Ajouter les pistes du flux local à la connexion peer
+        localStream.getTracks().forEach(track => localPeerConnection.addTrack(track, localStream));
+
+        // Créer la connexion peer pour le flux distant
+        remotePeerConnection = new RTCPeerConnection();
+
+        // Événement de suivi des ICE candidates pour la connexion peer locale
+        localPeerConnection.addEventListener('icecandidate', event => {
+          if (event.candidate) {
+            remotePeerConnection.addIceCandidate(event.candidate);
+          }
+        });
+
+        // Événement de suivi des ICE candidates pour la connexion peer distante
+        remotePeerConnection.addEventListener('icecandidate', event => {
+          if (event.candidate) {
+            localPeerConnection.addIceCandidate(event.candidate);
+          }
+        });
+
+        // Événement de suivi de la négociation de l'offre
+        localPeerConnection.addEventListener('negotiationneeded', async () => {
+          try {
+            const offer = await localPeerConnection.createOffer();
+            await localPeerConnection.setLocalDescription(offer);
+            await remotePeerConnection.setRemoteDescription(offer);
+
+            const answer = await remotePeerConnection.createAnswer();
+            await remotePeerConnection.setLocalDescription(answer);
+            await localPeerConnection.setRemoteDescription(answer);
+          } catch (error) {
+            console.error('Erreur lors de la négociation de l\'offre :', error);
+          }
+        });
+
+        // Événement de suivi de l'ajout du flux distant
+        remotePeerConnection.addEventListener('track', event => {
+          remoteStream = event.streams[0];
+          remoteVideo.srcObject = remoteStream;
+        });
+
+        // Établir la connexion entre les connexions peers
+        const offer = await localPeerConnection.createOffer();
+        await localPeerConnection.setLocalDescription(offer);
+        await remotePeerConnection.setRemoteDescription(offer);
+
+        const answer = await remotePeerConnection.createAnswer();
+        await remotePeerConnection.setLocalDescription(answer);
+        await localPeerConnection.setRemoteDescription(answer);
+
+        console.log('Appel vidéo démarré !');
+      } catch (error) {
+        console.error('Erreur lors du démarrage de l\'appel vidéo :', error);
+      }
+    }
+
+    // Fonction pour arrêter l'appel vidéo
+    function stopCall() {
+      // Arrêter les flux vidéo
+      localVideo.srcObject = null;
+      remoteVideo.srcObject = null;
+
+      // Arrêter les connexions peers
+      localPeerConnection.close();
+      remotePeerConnection.close();
+
+      // Arrêter les flux locaux
+      localStream.getTracks().forEach(track => track.stop());
+
+      console.log('Appel vidéo arrêté !');
+    }
+
+    // Ajouter les écouteurs d'événements aux boutons
+    startButton.addEventListener('click', startCall);
+    stopButton.addEventListener('click', stopCall);
+  </script>
+</body>
+</html>
